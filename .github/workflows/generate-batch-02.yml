@@ -41,11 +41,12 @@ jobs:
           from gradio_client import Client
 
           prompts = json.loads(pathlib.Path('prompts/batch-02.json').read_text(encoding='utf-8'))
-          prompt = prompts['NPC-011']
+          base_prompt = prompts['NPC-011']
           out = pathlib.Path('assets/batch-02')
           out.mkdir(parents=True, exist_ok=True)
 
           spaces = [
+              'manu994/prithivMLmods-Canopus-Pixar-3D-Flux-LoRA',
               'evalstate/flux1-schnell',
               'black-forest-labs/FLUX.1-schnell',
           ]
@@ -54,6 +55,7 @@ jobs:
               try:
                   print(f'Connecting to {space}')
                   client = Client(space)
+                  prompt = ('Pixar 3D, original mobile game NPC, ' + base_prompt) if 'Canopus' in space else base_prompt
                   result = client.predict(
                       prompt=prompt,
                       seed=8201,
@@ -63,6 +65,7 @@ jobs:
                       num_inference_steps=4,
                       api_name='/infer',
                   )
+                  print('PROVIDER_USED:', space)
                   print('RAW_RESULT:', repr(result))
                   candidate = result[0] if isinstance(result, (tuple, list)) else result
                   if isinstance(candidate, dict):
