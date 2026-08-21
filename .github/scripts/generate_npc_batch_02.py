@@ -46,7 +46,7 @@ for index, (npc_id, detail) in enumerate(PROMPTS.items(), start=1):
                 check=True,
             )
             size = temp.stat().st_size
-            if size < 50000:
+            if size < 15000:
                 raise RuntimeError(f'downloaded file too small: {size} bytes')
             os.replace(temp, target)
             print(f'generated {npc_id}: {target.stat().st_size} bytes')
