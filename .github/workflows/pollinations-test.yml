@@ -1,4 +1,4 @@
-name: Generate NPC Art Batch 02
+name: Compare NPC Image Models
 
 on:
   pull_request:
@@ -10,24 +10,23 @@ permissions:
   contents: read
 
 jobs:
-  generate:
+  compare:
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
-      - name: Generate NPC-007 through NPC-016
-        run: python3 .github/scripts/generate_npc_batch_02.py
-      - name: Validate outputs
+      - name: Generate comparison images
+        run: python3 .github/scripts/compare_image_models.py
+      - name: Inspect outputs
         shell: bash
         run: |
           set -euo pipefail
-          test "$(find npc_art_batch_02 -type f -name 'NPC-*.jpg' | wc -l)" -eq 10
-          find npc_art_batch_02 -type f -name 'NPC-*.jpg' -print0 | xargs -0 file
-          du -h npc_art_batch_02/*
-      - name: Upload NPC batch
+          find model_compare -type f -name '*.jpg' -print0 | xargs -0 file
+          du -h model_compare/*
+      - name: Upload comparison
         uses: actions/upload-artifact@v4
         with:
-          name: npc-art-batch-02
-          path: npc_art_batch_02
+          name: npc-image-model-comparison
+          path: model_compare
           if-no-files-found: error
           compression-level: 0
