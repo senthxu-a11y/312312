@@ -38,7 +38,7 @@ jobs:
 
           prompts = json.loads(pathlib.Path('prompts/batch-02.json').read_text(encoding='utf-8'))
           ids = [x.strip() for x in pathlib.Path('runs/batch-02-chunk.txt').read_text().replace('\n', ',').split(',') if x.strip()]
-          assert 1 <= len(ids) <= 3, f'chunk must contain 1-3 NPC IDs: {ids}'
+          assert 1 <= len(ids) <= 2, f'chunk must contain 1-2 NPC IDs: {ids}'
           out = pathlib.Path('generated-chunk')
           if out.exists():
               shutil.rmtree(out)
