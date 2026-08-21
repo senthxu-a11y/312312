@@ -1,0 +1,31 @@
+name: Pollinations Test
+
+on:
+  push:
+    paths:
+      - .github/workflows/pollinations-test.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  generate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Generate test image
+        run: |
+          set -euxo pipefail
+          mkdir -p generated
+          curl -L --fail --show-error --retry 3 --max-time 300 \
+            'https://gen.pollinations.ai/image/a%20red%20apple%20on%20a%20white%20background?model=flux&width=512&height=512' \
+            -o generated/test.jpg
+          file generated/test.jpg
+          test $(stat -c%s generated/test.jpg) -gt 20000
+      - uses: actions/upload-artifact@v4
+        with:
+          name: pollinations-test
+          path: generated/test.jpg
+          if-no-files-found: error
