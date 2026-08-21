@@ -1,4 +1,4 @@
-name: Generate High Quality NPC Art Batch 02
+name: Generate High Quality NPC Art Group 02A
 
 on:
   pull_request:
@@ -12,24 +12,26 @@ permissions:
 jobs:
   generate:
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 30
+    env:
+      NPC_IDS: NPC-007,NPC-008,NPC-009
     steps:
       - uses: actions/checkout@v4
       - name: Install Gradio client
         run: python3 -m pip install --upgrade gradio_client
-      - name: Generate NPC-007 through NPC-016
+      - name: Generate NPC-007 through NPC-009
         run: python3 .github/scripts/generate_hf_flux_batch_02.py
       - name: Inspect outputs
         shell: bash
         run: |
           set -euo pipefail
-          test "$(find hf_flux_batch_02 -type f | wc -l)" -eq 10
+          test "$(find hf_flux_batch_02 -type f | wc -l)" -eq 3
           find hf_flux_batch_02 -type f -print0 | xargs -0 file
           du -h hf_flux_batch_02/*
-      - name: Upload NPC batch
+      - name: Upload NPC group
         uses: actions/upload-artifact@v4
         with:
-          name: hf-flux-npc-batch-02
+          name: hf-flux-npc-group-02a
           path: hf_flux_batch_02
           if-no-files-found: error
           compression-level: 0
