@@ -31,6 +31,7 @@ jobs:
           import json
           import os
           import pathlib
+          import shutil
           import time
           from PIL import Image
           from gradio_client import Client
@@ -38,8 +39,10 @@ jobs:
           prompts = json.loads(pathlib.Path('prompts/batch-02.json').read_text(encoding='utf-8'))
           ids = [x.strip() for x in pathlib.Path('runs/batch-02-chunk.txt').read_text().replace('\n', ',').split(',') if x.strip()]
           assert 1 <= len(ids) <= 3, f'chunk must contain 1-3 NPC IDs: {ids}'
-          out = pathlib.Path('assets/batch-02')
-          out.mkdir(parents=True, exist_ok=True)
+          out = pathlib.Path('generated-chunk')
+          if out.exists():
+              shutil.rmtree(out)
+          out.mkdir(parents=True)
           client = Client('black-forest-labs/FLUX.1-schnell', httpx_kwargs={'timeout': 300.0})
 
           for npc_id in ids:
@@ -74,8 +77,8 @@ jobs:
           import pathlib
           from PIL import Image
           ids = [x.strip() for x in pathlib.Path('runs/batch-02-chunk.txt').read_text().replace('\n', ',').split(',') if x.strip()]
-          files = sorted(pathlib.Path('assets/batch-02').glob('NPC-*.jpg'))
-          assert len(files) == len(ids), (len(files), len(ids))
+          files = sorted(pathlib.Path('generated-chunk').glob('NPC-*.jpg'))
+          assert [p.stem for p in files] == sorted(ids), ([p.stem for p in files], sorted(ids))
           for path in files:
               with Image.open(path) as im:
                   assert im.width >= 900 and im.height >= 1200
@@ -84,6 +87,6 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: npc-art-${{ github.head_ref }}
-          path: assets/batch-02
+          path: generated-chunk
           if-no-files-found: error
           compression-level: 0
