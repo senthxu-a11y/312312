@@ -6,6 +6,12 @@ on:
     paths:
       - prompts/batch-02.json
       - .github/workflows/generate-batch-02.yml
+  pull_request:
+    branches: [main]
+    paths:
+      - prompts/batch-02.json
+      - .github/workflows/generate-batch-02.yml
+      - runs/batch-02-trigger.txt
   workflow_dispatch:
 
 permissions:
@@ -17,6 +23,8 @@ jobs:
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.ref || github.ref_name }}
 
       - name: Generate NPC-011 to NPC-020
         shell: bash
@@ -95,7 +103,8 @@ jobs:
           find assets/batch-02 -maxdepth 1 -type f -name 'NPC-*.jpg' -size -45k -print | tee /tmp/small.txt
           test ! -s /tmp/small.txt
 
-      - name: Commit generated images
+      - name: Commit generated images on direct runs
+        if: github.event_name != 'pull_request'
         shell: bash
         run: |
           git config user.name 'github-actions[bot]'
