@@ -4,7 +4,6 @@ on:
   push:
     branches: [main]
     paths:
-      - prompts/batch-02.json
       - .github/workflows/generate-batch-02.yml
   pull_request:
     branches: [main]
@@ -15,121 +14,96 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   generate:
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
         with:
           ref: ${{ github.event.pull_request.head.ref || github.ref_name }}
 
-      - name: Generate NPC-011 to NPC-020
+      - name: Install public Space client
+        run: python3 -m pip install --quiet --upgrade gradio_client pillow requests
+
+      - name: Diagnostic generation for NPC-011
         shell: bash
         run: |
           python3 - <<'PY'
           import json
           import os
           import pathlib
-          import subprocess
-          import time
-          import urllib.parse
+          import shutil
+          import requests
+          from PIL import Image
+          from gradio_client import Client
 
           prompts = json.loads(pathlib.Path('prompts/batch-02.json').read_text(encoding='utf-8'))
+          prompt = prompts['NPC-011']
           out = pathlib.Path('assets/batch-02')
           out.mkdir(parents=True, exist_ok=True)
 
-          def describe(path):
-              if not path.exists():
-                  return 'missing'
+          spaces = [
+              'evalstate/flux1-schnell',
+              'black-forest-labs/FLUX.1-schnell',
+          ]
+          last_error = None
+          for space in spaces:
               try:
-                  mime = subprocess.check_output(['file', '-b', '--mime-type', str(path)], text=True).strip()
+                  print(f'Connecting to {space}')
+                  client = Client(space)
+                  result = client.predict(
+                      prompt=prompt,
+                      seed=8201,
+                      randomize_seed=False,
+                      width=1024,
+                      height=1365,
+                      num_inference_steps=4,
+                      api_name='/infer',
+                  )
+                  print('RAW_RESULT:', repr(result))
+                  candidate = result[0] if isinstance(result, (tuple, list)) else result
+                  if isinstance(candidate, dict):
+                      candidate = candidate.get('path') or candidate.get('url')
+                  temp = out / 'NPC-011-source'
+                  if isinstance(candidate, str) and os.path.exists(candidate):
+                      shutil.copy2(candidate, temp)
+                  elif isinstance(candidate, str) and candidate.startswith('http'):
+                      response = requests.get(candidate, timeout=300)
+                      response.raise_for_status()
+                      temp.write_bytes(response.content)
+                  else:
+                      raise RuntimeError(f'Unsupported result: {candidate!r}')
+
+                  with Image.open(temp) as im:
+                      print('SOURCE_IMAGE:', im.format, im.size, im.mode)
+                      if im.width < 512 or im.height < 512:
+                          raise RuntimeError(f'Image too small: {im.size}')
+                      im.convert('RGB').save(out / 'NPC-011.jpg', 'JPEG', quality=95, optimize=True)
+                  temp.unlink(missing_ok=True)
+                  print('Generated assets/batch-02/NPC-011.jpg')
+                  break
               except Exception as exc:
-                  mime = f'unknown:{exc}'
-              return f'{path.stat().st_size} bytes, {mime}'
-
-          def valid_image(path):
-              if not path.exists() or path.stat().st_size < 5000:
-                  return False
-              mime = subprocess.check_output(['file', '-b', '--mime-type', str(path)], text=True).strip()
-              return mime in {'image/jpeg', 'image/png', 'image/webp'}
-
-          for index, (npc_id, prompt) in enumerate(prompts.items(), start=1):
-              target = out / f'{npc_id}.jpg'
-              if valid_image(target):
-                  print(f'skip existing {target}: {describe(target)}')
-                  continue
-
-              encoded = urllib.parse.quote(prompt, safe='')
-              seed = 8200 + index
-              endpoints = [
-                  f'https://image.pollinations.ai/prompt/{encoded}?model=flux&width=1024&height=1365&seed={seed}&nologo=true&enhance=true',
-                  f'https://pollinations.ai/p/{encoded}?width=1024&height=1365&seed={seed}&nologo=true',
-                  f'https://gen.pollinations.ai/image/{encoded}?model=flux&width=1024&height=1365&seed={seed}',
-              ]
-
-              success = False
-              for round_no in range(1, 4):
-                  for endpoint_no, endpoint in enumerate(endpoints, start=1):
-                      temp = out / f'{npc_id}.part'
-                      try:
-                          subprocess.run([
-                              'curl', '-L', '--fail', '--silent', '--show-error',
-                              '--connect-timeout', '30', '--max-time', '240',
-                              '--retry', '1', '--retry-delay', '4',
-                              '-A', 'Mozilla/5.0', '-o', str(temp), endpoint
-                          ], check=True)
-                          print(f'{npc_id} endpoint {endpoint_no}: {describe(temp)}')
-                          if valid_image(temp):
-                              os.replace(temp, target)
-                              print(f'generated {npc_id}: {describe(target)}')
-                              success = True
-                              break
-                          if temp.exists():
-                              temp.unlink()
-                      except Exception as exc:
-                          print(f'{npc_id} round {round_no} endpoint {endpoint_no} failed: {exc}; {describe(temp)}')
-                          if temp.exists():
-                              temp.unlink()
-                  if success:
-                      break
-                  time.sleep(8 * round_no)
-              if not success:
-                  raise SystemExit(f'failed to generate {npc_id}')
-              time.sleep(5)
+                  print(f'{space} failed: {type(exc).__name__}: {exc}')
+                  last_error = exc
+          else:
+              raise SystemExit(f'All public Spaces failed: {last_error}')
           PY
 
-      - name: Validate image count and file types
+      - name: Validate diagnostic image
         shell: bash
         run: |
           set -euo pipefail
-          count="$(find assets/batch-02 -maxdepth 1 -type f -name 'NPC-*.jpg' | wc -l)"
-          echo "image count: $count"
-          test "$count" -eq 10
-          find assets/batch-02 -maxdepth 1 -type f -name 'NPC-*.jpg' -print0 | xargs -0 file
-          find assets/batch-02 -maxdepth 1 -type f -name 'NPC-*.jpg' -size -5k -print | tee /tmp/small.txt
-          test ! -s /tmp/small.txt
+          test -f assets/batch-02/NPC-011.jpg
+          file assets/batch-02/NPC-011.jpg
+          test "$(stat -c%s assets/batch-02/NPC-011.jpg)" -gt 45000
 
-      - name: Commit generated images on direct runs
-        if: github.event_name != 'pull_request'
-        shell: bash
-        run: |
-          git config user.name 'github-actions[bot]'
-          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add assets/batch-02
-          if git diff --cached --quiet; then
-            echo 'No changes to commit.'
-          else
-            git commit -m 'art: generate NPC batch 02 images'
-            git push
-          fi
-
-      - name: Upload artifact
+      - name: Upload diagnostic artifact
         uses: actions/upload-artifact@v4
         with:
-          name: npc-art-batch-02
-          path: assets/batch-02
+          name: npc-art-batch-02-diagnostic
+          path: assets/batch-02/NPC-011.jpg
           if-no-files-found: error
           compression-level: 0
