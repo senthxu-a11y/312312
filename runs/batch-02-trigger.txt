@@ -1,0 +1,2 @@
+Trigger NPC batch 02 generation for NPC-011 through NPC-020.
+Requested from ChatGPT on 2026-08-21.
