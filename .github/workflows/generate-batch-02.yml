@@ -45,29 +45,32 @@ jobs:
           out = pathlib.Path('assets/batch-02')
           out.mkdir(parents=True, exist_ok=True)
 
-          spaces = [
-              ('https://manu994-prithivmlmods-canopus-pixar-3d-flux-lora.hf.space/', True),
-              ('black-forest-labs/FLUX.1-schnell', False),
+          providers = [
+              ('https://manu994-prithivmlmods-canopus-pixar-3d-flux-lora.hf.space/', 'pixar'),
+              ('black-forest-labs/FLUX.1-schnell', 'flux'),
           ]
           last_error = None
-          for space, use_trigger in spaces:
+          for space, provider_type in providers:
               try:
                   print(f'Connecting to {space}')
                   client = Client(space, httpx_kwargs={'timeout': 180.0})
-                  try:
-                      print('API_SCHEMA:', client.view_api(return_format='dict'))
-                  except Exception as schema_exc:
-                      print('API_SCHEMA_FAILED:', schema_exc)
-                  prompt = ('Pixar 3D, original mobile game NPC, ' + base_prompt) if use_trigger else base_prompt
-                  result = client.predict(
-                      prompt=prompt,
-                      seed=8201,
-                      randomize_seed=False,
-                      width=1024,
-                      height=1365,
-                      num_inference_steps=4,
-                      api_name='/infer',
-                  )
+                  print('API_SCHEMA:', client.view_api(return_format='dict'))
+                  if provider_type == 'pixar':
+                      prompt = 'Pixar 3D, original mobile game NPC, ' + base_prompt
+                      result = client.predict(
+                          prompt,
+                          api_name='/prithivMLmodsCanopus-Pixar-3D-Flux-LoRA',
+                      )
+                  else:
+                      result = client.predict(
+                          prompt=base_prompt,
+                          seed=8201,
+                          randomize_seed=False,
+                          width=1024,
+                          height=1365,
+                          num_inference_steps=4,
+                          api_name='/infer',
+                      )
                   print('PROVIDER_USED:', space)
                   print('RAW_RESULT:', repr(result))
                   candidate = result[0] if isinstance(result, (tuple, list)) else result
