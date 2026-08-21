@@ -1,38 +1,37 @@
-name: Pollinations Test
+name: Generate High Quality NPC Art Group 02D
 
 on:
-  push:
-    paths:
-      - .github/workflows/pollinations-test.yml
+  pull_request:
+    branches:
+      - main
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   generate:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 20
+    env:
+      NPC_IDS: NPC-016
     steps:
       - uses: actions/checkout@v4
-      - name: Generate test image
+      - name: Install Gradio client
+        run: python3 -m pip install --upgrade gradio_client
+      - name: Generate NPC-016
+        run: python3 .github/scripts/generate_hf_flux_batch_02.py
+      - name: Inspect output
+        shell: bash
         run: |
-          set -euxo pipefail
-          mkdir -p generated
-          curl -L --fail --show-error --retry 3 --max-time 300 \
-            'https://gen.pollinations.ai/image/a%20red%20apple%20on%20a%20white%20background?model=flux&width=512&height=512' \
-            -o generated/test.jpg
-          file generated/test.jpg
-          test $(stat -c%s generated/test.jpg) -gt 20000
-      - name: Commit generated image
-        run: |
-          git config user.name 'github-actions[bot]'
-          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add generated/test.jpg
-          git commit -m 'test: add generated Pollinations image'
-          git push
-      - uses: actions/upload-artifact@v4
+          set -euo pipefail
+          test "$(find hf_flux_batch_02 -type f | wc -l)" -eq 1
+          find hf_flux_batch_02 -type f -print0 | xargs -0 file
+          du -h hf_flux_batch_02/*
+      - name: Upload NPC group
+        uses: actions/upload-artifact@v4
         with:
-          name: pollinations-test
-          path: generated/test.jpg
+          name: hf-flux-npc-group-02d
+          path: hf_flux_batch_02
           if-no-files-found: error
+          compression-level: 0
