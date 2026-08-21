@@ -1,6 +1,10 @@
 name: Generate NPC Art Batch 02
 
 on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/generate-batch-02.yml
   pull_request:
     branches: [main]
     paths:
@@ -77,8 +81,7 @@ jobs:
                       print('SOURCE_IMAGE:', im.format, im.size, im.mode)
                       if im.width < 512 or im.height < 512:
                           raise RuntimeError(f'Image too small: {im.size}')
-                      rgb = im.convert('RGB')
-                      rgb.save(out / 'NPC-011.jpg', 'JPEG', quality=95, optimize=True)
+                      im.convert('RGB').save(out / 'NPC-011.jpg', 'JPEG', quality=95, optimize=True)
                   temp.unlink(missing_ok=True)
                   print('Generated assets/batch-02/NPC-011.jpg')
                   break
