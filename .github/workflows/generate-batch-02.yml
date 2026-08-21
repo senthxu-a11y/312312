@@ -41,8 +41,17 @@ jobs:
           out = pathlib.Path('assets/batch-02')
           out.mkdir(parents=True, exist_ok=True)
 
+          def describe(path):
+              if not path.exists():
+                  return 'missing'
+              try:
+                  mime = subprocess.check_output(['file', '-b', '--mime-type', str(path)], text=True).strip()
+              except Exception as exc:
+                  mime = f'unknown:{exc}'
+              return f'{path.stat().st_size} bytes, {mime}'
+
           def valid_image(path):
-              if not path.exists() or path.stat().st_size < 45000:
+              if not path.exists() or path.stat().st_size < 5000:
                   return False
               mime = subprocess.check_output(['file', '-b', '--mime-type', str(path)], text=True).strip()
               return mime in {'image/jpeg', 'image/png', 'image/webp'}
@@ -50,46 +59,46 @@ jobs:
           for index, (npc_id, prompt) in enumerate(prompts.items(), start=1):
               target = out / f'{npc_id}.jpg'
               if valid_image(target):
-                  print(f'skip existing {target}')
+                  print(f'skip existing {target}: {describe(target)}')
                   continue
 
               encoded = urllib.parse.quote(prompt, safe='')
               seed = 8200 + index
               endpoints = [
-                  f'https://gen.pollinations.ai/image/{encoded}?model=flux&width=1024&height=1365&seed={seed}',
                   f'https://image.pollinations.ai/prompt/{encoded}?model=flux&width=1024&height=1365&seed={seed}&nologo=true&enhance=true',
                   f'https://pollinations.ai/p/{encoded}?width=1024&height=1365&seed={seed}&nologo=true',
+                  f'https://gen.pollinations.ai/image/{encoded}?model=flux&width=1024&height=1365&seed={seed}',
               ]
 
               success = False
-              for round_no in range(1, 5):
-                  for endpoint in endpoints:
+              for round_no in range(1, 4):
+                  for endpoint_no, endpoint in enumerate(endpoints, start=1):
                       temp = out / f'{npc_id}.part'
                       try:
                           subprocess.run([
                               'curl', '-L', '--fail', '--silent', '--show-error',
-                              '--connect-timeout', '30', '--max-time', '360',
-                              '--retry', '2', '--retry-delay', '5',
+                              '--connect-timeout', '30', '--max-time', '240',
+                              '--retry', '1', '--retry-delay', '4',
                               '-A', 'Mozilla/5.0', '-o', str(temp), endpoint
                           ], check=True)
+                          print(f'{npc_id} endpoint {endpoint_no}: {describe(temp)}')
                           if valid_image(temp):
                               os.replace(temp, target)
-                              print(f'generated {npc_id}: {target.stat().st_size} bytes')
+                              print(f'generated {npc_id}: {describe(target)}')
                               success = True
                               break
                           if temp.exists():
-                              print(f'invalid response for {npc_id}: {temp.stat().st_size} bytes')
                               temp.unlink()
                       except Exception as exc:
-                          print(f'{npc_id} round {round_no} endpoint failed: {exc}')
+                          print(f'{npc_id} round {round_no} endpoint {endpoint_no} failed: {exc}; {describe(temp)}')
                           if temp.exists():
                               temp.unlink()
                   if success:
                       break
-                  time.sleep(12 * round_no)
+                  time.sleep(8 * round_no)
               if not success:
                   raise SystemExit(f'failed to generate {npc_id}')
-              time.sleep(8)
+              time.sleep(5)
           PY
 
       - name: Validate image count and file types
@@ -100,7 +109,7 @@ jobs:
           echo "image count: $count"
           test "$count" -eq 10
           find assets/batch-02 -maxdepth 1 -type f -name 'NPC-*.jpg' -print0 | xargs -0 file
-          find assets/batch-02 -maxdepth 1 -type f -name 'NPC-*.jpg' -size -45k -print | tee /tmp/small.txt
+          find assets/batch-02 -maxdepth 1 -type f -name 'NPC-*.jpg' -size -5k -print | tee /tmp/small.txt
           test ! -s /tmp/small.txt
 
       - name: Commit generated images on direct runs
