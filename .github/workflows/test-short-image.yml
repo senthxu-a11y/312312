@@ -15,43 +15,24 @@ permissions:
 jobs:
   test:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
         with:
           ref: ${{ github.event.pull_request.head.ref || github.ref_name }}
-      - name: Generate concise prompt model comparison
+      - name: Generate balanced concise NPC prompt
         shell: bash
         run: |
           python3 - <<'PY'
-          import pathlib, subprocess, urllib.parse, time
+          import pathlib, subprocess, urllib.parse
           prompt = pathlib.Path('prompts/short-test.txt').read_text().strip()
           encoded = urllib.parse.quote(prompt, safe='')
-          out = pathlib.Path('model-tests')
-          out.mkdir(exist_ok=True)
-          tests = [
-              ('image-flux', f'https://image.pollinations.ai/prompt/{encoded}?model=flux&width=768&height=1024&seed=9914&nologo=true&enhance=true'),
-              ('image-turbo', f'https://image.pollinations.ai/prompt/{encoded}?model=turbo&width=768&height=1024&seed=9915&nologo=true&enhance=true'),
-              ('image-seedream', f'https://image.pollinations.ai/prompt/{encoded}?model=seedream&width=768&height=1024&seed=9916&nologo=true&enhance=true'),
-              ('image-gptimage', f'https://image.pollinations.ai/prompt/{encoded}?model=gptimage&width=768&height=1024&seed=9917&nologo=true&enhance=true'),
-              ('image-zimage', f'https://image.pollinations.ai/prompt/{encoded}?model=zimage&width=768&height=1024&seed=9918&nologo=true&enhance=true'),
-              ('image-nova', f'https://image.pollinations.ai/prompt/{encoded}?model=nova-canvas&width=768&height=1024&seed=9919&nologo=true&enhance=true'),
-              ('legacy-page', f'https://pollinations.ai/p/{encoded}?width=768&height=1024&seed=9920&nologo=true'),
-          ]
-          for name, url in tests:
-              target = out / f'{name}.jpg'
-              try:
-                  subprocess.run(['curl','-L','--fail','--silent','--show-error','--max-time','360','-A','Mozilla/5.0','-o',str(target),url],check=True)
-                  subprocess.run(['file',str(target)],check=True)
-              except Exception as exc:
-                  print(f'{name} failed: {exc}')
-                  if target.exists():
-                      target.rename(out / f'{name}.response')
-              time.sleep(4)
+          url = f'https://image.pollinations.ai/prompt/{encoded}?model=flux&width=768&height=1024&seed=10031&nologo=true&enhance=true'
+          subprocess.run(['curl','-L','--fail','--silent','--show-error','--max-time','360','-A','Mozilla/5.0','-o','balanced-test.jpg',url],check=True)
+          subprocess.run(['file','balanced-test.jpg'],check=True)
           PY
       - uses: actions/upload-artifact@v4
         with:
           name: short-npc-prompt-test
-          path: model-tests
-          if-no-files-found: error
+          path: balanced-test.jpg
           compression-level: 0
