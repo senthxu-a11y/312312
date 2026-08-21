@@ -1,0 +1,116 @@
+name: Generate FLUX NPC Batch 02 Matrix
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - runs/flux-matrix-trigger.txt
+      - prompts/batch-02.json
+      - .github/workflows/generate-flux-batch-matrix.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  generate-pair:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - pair: '01'
+            ids: '["NPC-011","NPC-012"]'
+          - pair: '02'
+            ids: '["NPC-013","NPC-014"]'
+          - pair: '03'
+            ids: '["NPC-015","NPC-016"]'
+          - pair: '04'
+            ids: '["NPC-017","NPC-018"]'
+          - pair: '05'
+            ids: '["NPC-019","NPC-020"]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.ref || github.ref_name }}
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install image client
+        run: pip install --quiet --upgrade gradio_client pillow
+
+      - name: Generate pair ${{ matrix.pair }}
+        env:
+          NPC_IDS: ${{ matrix.ids }}
+          PAIR_ID: ${{ matrix.pair }}
+        shell: bash
+        run: |
+          python - <<'PY'
+          import json
+          import os
+          import pathlib
+          from PIL import Image
+          from gradio_client import Client
+
+          prompts = json.loads(pathlib.Path('prompts/batch-02.json').read_text(encoding='utf-8'))
+          ids = json.loads(os.environ['NPC_IDS'])
+          pair_id = os.environ['PAIR_ID']
+          out = pathlib.Path(f'assets/flux-batch-02/pair-{pair_id}')
+          out.mkdir(parents=True, exist_ok=True)
+          client = Client('black-forest-labs/FLUX.1-schnell', httpx_kwargs={'timeout': 300.0})
+          generated = []
+          errors = []
+
+          for position, npc_id in enumerate(ids, start=1):
+              prompt = prompts[npc_id] + (
+                  ' Match a polished Township-like premium 3D mobile game NPC aesthetic while remaining original. '
+                  'Use mature grounded facial proportions for adults, a clearly distinct nose jaw eye shape and body silhouette, '
+                  'soft rounded materials, warm studio light, medium gray background, one person only, no text, no UI, '
+                  'complete hands and props, no duplicate body, no anime, no chibi, no giant head, no enormous eyes.'
+              )
+              seed = 9100 + int(npc_id.split('-')[1]) * 7
+              try:
+                  result = client.predict(
+                      prompt=prompt,
+                      seed=seed,
+                      randomize_seed=False,
+                      width=1024,
+                      height=1365,
+                      num_inference_steps=4,
+                      api_name='/infer',
+                  )
+                  candidate = result[0] if isinstance(result, (tuple, list)) else result
+                  if isinstance(candidate, dict):
+                      candidate = candidate.get('path') or candidate.get('url')
+                  if not isinstance(candidate, str) or not os.path.exists(candidate):
+                      raise RuntimeError(f'Unsupported result: {candidate!r}')
+                  target = out / f'{npc_id}.jpg'
+                  with Image.open(candidate) as im:
+                      if im.width < 900 or im.height < 1200:
+                          raise RuntimeError(f'Image too small: {im.size}')
+                      im.convert('RGB').save(target, 'JPEG', quality=95, optimize=True)
+                  generated.append(npc_id)
+                  print(f'GENERATED {npc_id}: {target.stat().st_size} bytes')
+              except Exception as exc:
+                  errors.append(f'{npc_id}: {type(exc).__name__}: {exc}')
+                  print('GENERATION_FAILED', errors[-1])
+
+          (out / 'status.json').write_text(
+              json.dumps({'pair': pair_id, 'requested': ids, 'generated': generated, 'errors': errors}, indent=2),
+              encoding='utf-8',
+          )
+          if not generated:
+              raise SystemExit('No images generated for this pair')
+          PY
+
+      - name: Upload pair artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: npc-art-batch-02-pair-${{ matrix.pair }}
+          path: assets/flux-batch-02/pair-${{ matrix.pair }}
+          if-no-files-found: warn
+          compression-level: 0
