@@ -1,4 +1,4 @@
-name: Test Hugging Face FLUX NPC Art
+name: Generate High Quality NPC Art Batch 02
 
 on:
   pull_request:
@@ -12,23 +12,24 @@ permissions:
 jobs:
   generate:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
       - name: Install Gradio client
         run: python3 -m pip install --upgrade gradio_client
-      - name: Generate NPC-007 with FLUX
-        run: python3 .github/scripts/test_hf_flux.py
-      - name: Inspect output
+      - name: Generate NPC-007 through NPC-016
+        run: python3 .github/scripts/generate_hf_flux_batch_02.py
+      - name: Inspect outputs
         shell: bash
         run: |
           set -euo pipefail
-          find hf_flux_test -type f -print0 | xargs -0 file
-          du -h hf_flux_test/*
-      - name: Upload output
+          test "$(find hf_flux_batch_02 -type f | wc -l)" -eq 10
+          find hf_flux_batch_02 -type f -print0 | xargs -0 file
+          du -h hf_flux_batch_02/*
+      - name: Upload NPC batch
         uses: actions/upload-artifact@v4
         with:
-          name: hf-flux-npc-test
-          path: hf_flux_test
+          name: hf-flux-npc-batch-02
+          path: hf_flux_batch_02
           if-no-files-found: error
           compression-level: 0
