@@ -1,0 +1,128 @@
+name: Pixar Space Fallback Diagnostic
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - runs/pixar-fallback-trigger.txt
+      - .github/workflows/pixar-space-fallback.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  generate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.ref || github.ref_name }}
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install image client
+        run: pip install --quiet --upgrade gradio_client pillow requests
+
+      - name: Try public 3D cartoon Spaces
+        shell: bash
+        run: |
+          python - <<'PY'
+          import os
+          import pathlib
+          import shutil
+          from PIL import Image
+          from gradio_client import Client
+
+          prompt = (
+              'Pixar 3D, original premium mobile farming game NPC, adult female mechanic, '
+              'medium-brown skin, small square face, narrow monolid eyes, short round nose, '
+              'short dark curly hair, protective goggles on head, lake-blue mechanic romper, '
+              'cream short sleeves, orange tool belt, holding a miniature robot arm and explaining it, '
+              'thigh-up three-quarter portrait, grounded adult proportions, moderately sized eyes, '
+              'polished rounded 3D cartoon render, soft warm studio light, medium gray background, '
+              'single character, no text, no UI, no anime, no chibi, no giant head, no enormous eyes.'
+          )
+          spaces = [
+              'almendro18/prithivMLmods-Canopus-Pixar-3D-Flux-LoRA',
+              'YasserYas/DISNEY-PIXAR',
+              '1achy/prithivMLmods-Canopus-Pixar-Art',
+              'atifnadeem/testing',
+              'manu994/prithivMLmods-Canopus-Pixar-3D-Flux-LoRA',
+          ]
+          out = pathlib.Path('assets/pixar-space-fallback')
+          out.mkdir(parents=True, exist_ok=True)
+          errors = []
+
+          for space in spaces:
+              try:
+                  print(f'CONNECTING: {space}')
+                  client = Client(space, httpx_kwargs={'timeout': 300.0})
+                  api = client.view_api(return_format='dict')
+                  print('API:', api)
+                  endpoints = api.get('named_endpoints', {})
+                  candidate_eps = []
+                  for name, spec in endpoints.items():
+                      params = spec.get('parameters', [])
+                      returns = spec.get('returns', [])
+                      if len(params) == 1 and params[0].get('python_type', {}).get('type') == 'str' and returns:
+                          candidate_eps.append(name)
+                  if not candidate_eps:
+                      raise RuntimeError('No single-text image endpoint found')
+                  print('ENDPOINTS:', candidate_eps)
+                  last = None
+                  for endpoint in candidate_eps:
+                      try:
+                          result = client.predict(prompt, api_name=endpoint)
+                          print('RESULT:', endpoint, repr(result))
+                          candidate = result[0] if isinstance(result, (tuple, list)) else result
+                          if isinstance(candidate, dict):
+                              candidate = candidate.get('path') or candidate.get('url')
+                          if not isinstance(candidate, str) or not os.path.exists(candidate):
+                              raise RuntimeError(f'Unsupported result: {candidate!r}')
+                          with Image.open(candidate) as im:
+                              print('SOURCE:', space, endpoint, im.format, im.size, im.mode)
+                              if min(im.size) < 512:
+                                  raise RuntimeError(f'Image too small: {im.size}')
+                              canvas = Image.new('RGB', (1024, 1365), (91, 91, 91))
+                              rgb = im.convert('RGB')
+                              rgb.thumbnail((980, 1320), Image.Resampling.LANCZOS)
+                              canvas.paste(rgb, ((1024-rgb.width)//2, (1365-rgb.height)//2))
+                              canvas.save(out / 'NPC-011-pixar-fallback.jpg', 'JPEG', quality=95, optimize=True)
+                          (out / 'provider.txt').write_text(f'{space}\n{endpoint}\n', encoding='utf-8')
+                          print('SUCCESS_PROVIDER:', space, endpoint)
+                          raise SystemExit(0)
+                      except SystemExit:
+                          raise
+                      except Exception as exc:
+                          last = exc
+                          print(f'ENDPOINT_FAILED {space} {endpoint}: {type(exc).__name__}: {exc}')
+                  raise RuntimeError(f'All endpoints failed: {last}')
+              except SystemExit as exc:
+                  if exc.code == 0:
+                      raise
+                  raise
+              except Exception as exc:
+                  errors.append(f'{space}: {type(exc).__name__}: {exc}')
+                  print('SPACE_FAILED:', errors[-1])
+
+          raise SystemExit('All candidate Spaces failed:\n' + '\n'.join(errors))
+          PY
+
+      - name: Validate output
+        run: |
+          test -f assets/pixar-space-fallback/NPC-011-pixar-fallback.jpg
+          test -f assets/pixar-space-fallback/provider.txt
+          file assets/pixar-space-fallback/NPC-011-pixar-fallback.jpg
+          cat assets/pixar-space-fallback/provider.txt
+
+      - name: Upload diagnostic
+        uses: actions/upload-artifact@v4
+        with:
+          name: npc-011-pixar-space-fallback
+          path: assets/pixar-space-fallback
+          if-no-files-found: error
+          compression-level: 0
