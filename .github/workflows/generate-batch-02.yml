@@ -46,16 +46,19 @@ jobs:
           out.mkdir(parents=True, exist_ok=True)
 
           spaces = [
-              'manu994/prithivMLmods-Canopus-Pixar-3D-Flux-LoRA',
-              'evalstate/flux1-schnell',
-              'black-forest-labs/FLUX.1-schnell',
+              ('https://manu994-prithivmlmods-canopus-pixar-3d-flux-lora.hf.space/', True),
+              ('black-forest-labs/FLUX.1-schnell', False),
           ]
           last_error = None
-          for space in spaces:
+          for space, use_trigger in spaces:
               try:
                   print(f'Connecting to {space}')
-                  client = Client(space)
-                  prompt = ('Pixar 3D, original mobile game NPC, ' + base_prompt) if 'Canopus' in space else base_prompt
+                  client = Client(space, httpx_kwargs={'timeout': 180.0})
+                  try:
+                      print('API_SCHEMA:', client.view_api(return_format='dict'))
+                  except Exception as schema_exc:
+                      print('API_SCHEMA_FAILED:', schema_exc)
+                  prompt = ('Pixar 3D, original mobile game NPC, ' + base_prompt) if use_trigger else base_prompt
                   result = client.predict(
                       prompt=prompt,
                       seed=8201,
