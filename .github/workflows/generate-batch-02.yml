@@ -57,10 +57,7 @@ jobs:
                   print('API_SCHEMA:', client.view_api(return_format='dict'))
                   if provider_type == 'pixar':
                       prompt = 'Pixar 3D, original mobile game NPC, ' + base_prompt
-                      result = client.predict(
-                          prompt,
-                          api_name='/prithivMLmodsCanopus-Pixar-3D-Flux-LoRA',
-                      )
+                      result = client.predict(prompt, api_name='/predict')
                   else:
                       result = client.predict(
                           prompt=base_prompt,
