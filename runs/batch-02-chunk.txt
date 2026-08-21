@@ -1,2 +1,1 @@
-NPC-017,NPC-018,NPC-019
-# retry isolated output
+NPC-017,NPC-018,NPC-019,,
