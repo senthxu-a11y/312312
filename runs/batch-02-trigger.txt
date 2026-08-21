@@ -1,0 +1,2 @@
+Generate NPC-011 through NPC-020 from prompts/batch-02.json.
+Retry 2: validate actual MIME before rejecting small images.
