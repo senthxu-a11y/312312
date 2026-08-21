@@ -1,0 +1,1 @@
+Run concise NPC image prompt validation.
