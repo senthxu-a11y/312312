@@ -1,0 +1,84 @@
+name: Pixar Space NPC Diagnostic
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - runs/pixar-space-trigger.txt
+      - prompts/batch-02.json
+      - .github/workflows/pixar-space-diagnostic.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  generate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.ref || github.ref_name }}
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install image client
+        run: pip install --quiet --upgrade gradio_client pillow requests
+
+      - name: Generate NPC-011 with dedicated 3D LoRA Space
+        shell: bash
+        run: |
+          python - <<'PY'
+          import json
+          import os
+          import pathlib
+          import shutil
+          from PIL import Image
+          from gradio_client import Client
+
+          prompts = json.loads(pathlib.Path('prompts/batch-02.json').read_text(encoding='utf-8'))
+          prompt = 'Pixar 3D, original premium mobile farming game NPC, ' + prompts['NPC-011']
+          out = pathlib.Path('assets/pixar-space-diagnostic')
+          out.mkdir(parents=True, exist_ok=True)
+
+          client = Client(
+              'https://manu994-prithivmlmods-canopus-pixar-3d-flux-lora.hf.space/',
+              httpx_kwargs={'timeout': 300.0},
+          )
+          result = client.predict(prompt, api_name='/predict')
+          print('RAW_RESULT:', repr(result))
+          candidate = result[0] if isinstance(result, (tuple, list)) else result
+          if isinstance(candidate, dict):
+              candidate = candidate.get('path') or candidate.get('url')
+          if not isinstance(candidate, str) or not os.path.exists(candidate):
+              raise RuntimeError(f'Unsupported result: {candidate!r}')
+
+          source = pathlib.Path(candidate)
+          with Image.open(source) as im:
+              print('SOURCE_IMAGE:', im.format, im.size, im.mode)
+              rgb = im.convert('RGB')
+              canvas = Image.new('RGB', (1024, 1365), (91, 91, 91))
+              rgb.thumbnail((980, 1320), Image.Resampling.LANCZOS)
+              x = (1024 - rgb.width) // 2
+              y = (1365 - rgb.height) // 2
+              canvas.paste(rgb, (x, y))
+              canvas.save(out / 'NPC-011-pixar.jpg', 'JPEG', quality=95, optimize=True)
+          print('OUTPUT:', out / 'NPC-011-pixar.jpg')
+          PY
+
+      - name: Validate output
+        run: |
+          test -f assets/pixar-space-diagnostic/NPC-011-pixar.jpg
+          file assets/pixar-space-diagnostic/NPC-011-pixar.jpg
+          test "$(stat -c%s assets/pixar-space-diagnostic/NPC-011-pixar.jpg)" -gt 45000
+
+      - name: Upload diagnostic
+        uses: actions/upload-artifact@v4
+        with:
+          name: npc-011-pixar-space-diagnostic
+          path: assets/pixar-space-diagnostic/NPC-011-pixar.jpg
+          if-no-files-found: error
+          compression-level: 0
