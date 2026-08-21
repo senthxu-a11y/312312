@@ -1,3 +1,4 @@
+import os
 import pathlib
 import shutil
 import time
@@ -34,7 +35,10 @@ def collect_files(value, found):
         for v in value:
             collect_files(v, found)
 
-for index, (npc_id, detail) in enumerate(PROMPTS.items(), start=1):
+requested = [x.strip() for x in os.environ.get('NPC_IDS', '').split(',') if x.strip()]
+selected = [(k, PROMPTS[k]) for k in requested] if requested else list(PROMPTS.items())
+
+for index, (npc_id, detail) in enumerate(selected, start=1):
     prompt = BASE + detail
     result = client.predict(
         prompt=prompt,
