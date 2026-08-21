@@ -19,97 +19,103 @@ permissions:
 jobs:
   generate:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 50
     steps:
       - uses: actions/checkout@v4
         with:
           ref: ${{ github.event.pull_request.head.ref || github.ref_name }}
 
-      - name: Install public Space client
-        run: python3 -m pip install --quiet --upgrade gradio_client pillow requests
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
 
-      - name: Diagnostic generation for NPC-011
+      - name: Install FLUX client and image tools
+        run: pip install --quiet --upgrade gradio_client pillow requests
+
+      - name: Generate two candidates for NPC-011 through NPC-020
         shell: bash
         run: |
-          python3 - <<'PY'
+          python - <<'PY'
           import json
           import os
           import pathlib
           import shutil
-          import requests
+          import time
           from PIL import Image
           from gradio_client import Client
 
           prompts = json.loads(pathlib.Path('prompts/batch-02.json').read_text(encoding='utf-8'))
-          base_prompt = prompts['NPC-011']
-          out = pathlib.Path('assets/batch-02')
+          out = pathlib.Path('assets/batch-02-candidates')
           out.mkdir(parents=True, exist_ok=True)
 
-          providers = [
-              ('https://manu994-prithivmlmods-canopus-pixar-3d-flux-lora.hf.space/', 'pixar'),
-              ('black-forest-labs/FLUX.1-schnell', 'flux'),
-          ]
-          last_error = None
-          for space, provider_type in providers:
-              try:
-                  print(f'Connecting to {space}')
-                  client = Client(space, httpx_kwargs={'timeout': 180.0})
-                  print('API_SCHEMA:', client.view_api(return_format='dict'))
-                  if provider_type == 'pixar':
-                      prompt = 'Pixar 3D, original mobile game NPC, ' + base_prompt
-                      result = client.predict(prompt, api_name='/predict')
-                  else:
-                      result = client.predict(
-                          prompt=base_prompt,
-                          seed=8201,
-                          randomize_seed=False,
-                          width=1024,
-                          height=1365,
-                          num_inference_steps=4,
-                          api_name='/infer',
-                      )
-                  print('PROVIDER_USED:', space)
-                  print('RAW_RESULT:', repr(result))
-                  candidate = result[0] if isinstance(result, (tuple, list)) else result
-                  if isinstance(candidate, dict):
-                      candidate = candidate.get('path') or candidate.get('url')
-                  temp = out / 'NPC-011-source'
-                  if isinstance(candidate, str) and os.path.exists(candidate):
-                      shutil.copy2(candidate, temp)
-                  elif isinstance(candidate, str) and candidate.startswith('http'):
-                      response = requests.get(candidate, timeout=300)
-                      response.raise_for_status()
-                      temp.write_bytes(response.content)
-                  else:
-                      raise RuntimeError(f'Unsupported result: {candidate!r}')
+          client = Client('black-forest-labs/FLUX.1-schnell', httpx_kwargs={'timeout': 300.0})
 
-                  with Image.open(temp) as im:
-                      print('SOURCE_IMAGE:', im.format, im.size, im.mode)
-                      if im.width < 512 or im.height < 512:
-                          raise RuntimeError(f'Image too small: {im.size}')
-                      im.convert('RGB').save(out / 'NPC-011.jpg', 'JPEG', quality=95, optimize=True)
-                  temp.unlink(missing_ok=True)
-                  print('Generated assets/batch-02/NPC-011.jpg')
-                  break
-              except Exception as exc:
-                  print(f'{space} failed: {type(exc).__name__}: {exc}')
-                  last_error = exc
-          else:
-              raise SystemExit(f'All public Spaces failed: {last_error}')
+          def extract_path(result):
+              candidate = result[0] if isinstance(result, (tuple, list)) else result
+              if isinstance(candidate, dict):
+                  candidate = candidate.get('path') or candidate.get('url')
+              if not isinstance(candidate, str) or not os.path.exists(candidate):
+                  raise RuntimeError(f'Unsupported FLUX result: {candidate!r}')
+              return candidate
+
+          for idx, (npc_id, prompt) in enumerate(prompts.items(), start=1):
+              for variant_idx, variant in enumerate(('A', 'B')):
+                  target = out / f'{npc_id}-{variant}.jpg'
+                  seed = 8400 + idx * 10 + variant_idx
+                  final_prompt = (
+                      prompt
+                      + ' One single character only, no duplicate person, no extra limbs, complete hands and role props, '
+                        'clean silhouette, polished professional quality matching a premium cozy farming mobile game.'
+                  )
+                  last_error = None
+                  for attempt in range(1, 4):
+                      try:
+                          result = client.predict(
+                              prompt=final_prompt,
+                              seed=seed + attempt - 1,
+                              randomize_seed=False,
+                              width=1024,
+                              height=1365,
+                              num_inference_steps=4,
+                              api_name='/infer',
+                          )
+                          source = extract_path(result)
+                          with Image.open(source) as im:
+                              if im.width < 900 or im.height < 1200:
+                                  raise RuntimeError(f'Image too small: {im.size}')
+                              im.convert('RGB').save(target, 'JPEG', quality=95, optimize=True)
+                          print(f'generated {target} ({target.stat().st_size} bytes)')
+                          break
+                      except Exception as exc:
+                          last_error = exc
+                          print(f'{npc_id}-{variant} attempt {attempt} failed: {type(exc).__name__}: {exc}')
+                          time.sleep(15 * attempt)
+                          client = Client('black-forest-labs/FLUX.1-schnell', httpx_kwargs={'timeout': 300.0})
+                  else:
+                      raise SystemExit(f'failed to generate {npc_id}-{variant}: {last_error}')
+                  time.sleep(3)
           PY
 
-      - name: Validate diagnostic image
+      - name: Validate candidate set
         shell: bash
         run: |
-          set -euo pipefail
-          test -f assets/batch-02/NPC-011.jpg
-          file assets/batch-02/NPC-011.jpg
-          test "$(stat -c%s assets/batch-02/NPC-011.jpg)" -gt 45000
+          python - <<'PY'
+          from pathlib import Path
+          from PIL import Image
 
-      - name: Upload diagnostic artifact
+          files = sorted(Path('assets/batch-02-candidates').glob('NPC-*.jpg'))
+          assert len(files) == 20, f'expected 20 images, got {len(files)}'
+          for path in files:
+              assert path.stat().st_size > 45000, f'{path} too small'
+              with Image.open(path) as im:
+                  assert im.width >= 900 and im.height >= 1200, f'{path}: {im.size}'
+                  print(path.name, im.size, path.stat().st_size)
+          PY
+
+      - name: Upload candidate artifact
         uses: actions/upload-artifact@v4
         with:
-          name: npc-art-batch-02-diagnostic
-          path: assets/batch-02/NPC-011.jpg
+          name: npc-art-batch-02-candidates
+          path: assets/batch-02-candidates
           if-no-files-found: error
           compression-level: 0
