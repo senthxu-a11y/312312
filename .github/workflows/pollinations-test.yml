@@ -20,7 +20,7 @@ jobs:
           set -euxo pipefail
           mkdir -p generated
           curl -L --fail --show-error --retry 3 --max-time 300 \
-            'https://gen.pollinations.ai/image/a%20red%20apple%20on%20a%20white%20background?model=flux&width=512&height=512' \
+            'https://image.pollinations.ai/prompt/a%20red%20apple%20on%20a%20white%20background?model=flux&width=512&height=512&nologo=true' \
             -o generated/test.jpg
           file generated/test.jpg
           test $(stat -c%s generated/test.jpg) -gt 20000
