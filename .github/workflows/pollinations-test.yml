@@ -1,4 +1,4 @@
-name: Pollinations Test
+name: Generate NPC Art Batch 02
 
 on:
   pull_request:
@@ -12,20 +12,22 @@ permissions:
 jobs:
   generate:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
-      - name: Generate test image
+      - name: Generate NPC-007 through NPC-016
+        run: python3 .github/scripts/generate_npc_batch_02.py
+      - name: Validate outputs
+        shell: bash
         run: |
-          set -euxo pipefail
-          mkdir -p generated
-          curl -L --fail --show-error --retry 3 --max-time 300 \
-            'https://image.pollinations.ai/prompt/a%20red%20apple%20on%20a%20white%20background?model=flux&width=512&height=512&nologo=true' \
-            -o generated/test.jpg
-          file generated/test.jpg
-          test $(stat -c%s generated/test.jpg) -gt 20000
-      - uses: actions/upload-artifact@v4
+          set -euo pipefail
+          test "$(find npc_art_batch_02 -type f -name 'NPC-*.jpg' | wc -l)" -eq 10
+          find npc_art_batch_02 -type f -name 'NPC-*.jpg' -print0 | xargs -0 file
+          du -h npc_art_batch_02/*
+      - name: Upload NPC batch
+        uses: actions/upload-artifact@v4
         with:
-          name: pollinations-test
-          path: generated/test.jpg
+          name: npc-art-batch-02
+          path: npc_art_batch_02
           if-no-files-found: error
+          compression-level: 0
