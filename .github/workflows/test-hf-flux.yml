@@ -1,0 +1,59 @@
+name: Test Hugging Face FLUX NPC
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - prompts/short-test.txt
+      - runs/hf-flux-trigger.txt
+      - .github/workflows/test-hf-flux.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.ref || github.ref_name }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install Gradio client
+        run: pip install --quiet --upgrade gradio_client
+      - name: Generate FLUX test image
+        shell: bash
+        run: |
+          python - <<'PY'
+          import pathlib
+          import shutil
+          from gradio_client import Client
+
+          prompt = pathlib.Path('prompts/short-test.txt').read_text().strip()
+          client = Client('black-forest-labs/FLUX.1-schnell')
+          print(client.view_api())
+          result = client.predict(
+              prompt=prompt,
+              seed=10031,
+              randomize_seed=False,
+              width=768,
+              height=1024,
+              num_inference_steps=4,
+              api_name='/infer',
+          )
+          print('result:', result)
+          source = result[0] if isinstance(result, (tuple, list)) else result
+          if isinstance(source, dict):
+              source = source.get('path') or source.get('name')
+          shutil.copy2(str(source), 'hf-flux-test.webp')
+          PY
+      - run: file hf-flux-test.webp && ls -lh hf-flux-test.webp
+      - uses: actions/upload-artifact@v4
+        with:
+          name: hf-flux-npc-test
+          path: hf-flux-test.webp
+          compression-level: 0
