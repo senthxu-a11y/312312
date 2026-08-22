@@ -1,0 +1,1 @@
+Trigger public 3D cartoon Space fallback diagnostic for NPC-011.
