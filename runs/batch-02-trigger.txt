@@ -1,0 +1,1 @@
+Run dedicated 3D LoRA diagnostic through standard predict endpoint.
