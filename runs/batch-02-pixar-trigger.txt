@@ -1,0 +1,1 @@
+Trigger dedicated 3D LoRA diagnostic for NPC-011 using grounded batch-02 prompts.
